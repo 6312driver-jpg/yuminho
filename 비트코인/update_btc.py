@@ -167,17 +167,17 @@ def summary(wb):
 
 def notify(wb):
     try:
-        import kakao_notify
+        import telegram_notify as notifier
     except ImportError:
         return
-    if not kakao_notify.configured():
+    if not notifier.configured():
         return
     try:
         msg = summary(wb)
-        kakao_notify.send(msg)
-        logging.info('카카오톡 전송: %s', msg.replace('\n', ' | '))
+        notifier.send(msg)
+        logging.info('텔레그램 전송: %s', msg.replace('\n', ' | '))
     except Exception as e:
-        logging.error('카카오톡 전송 실패: %s', e)
+        logging.error('텔레그램 전송 실패: %s', e)
 
 
 def main(fetcher=fetch, today=None):

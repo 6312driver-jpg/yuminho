@@ -1,0 +1,17 @@
+비트코인 멱법칙 엑셀 - 매일 오전 9시 자동 업데이트
+
+1. 이 폴더의 파일 3개를 C:\Users\6312d\OneDrive\Desktop\AI 에 복사
+   - 비트코인_멱법칙.xlsx
+   - update_btc.py
+   - register_task.bat
+2. Python 이 없으면 https://www.python.org 에서 설치 (설치 화면에서 "Add python.exe to PATH" 체크)
+3. register_task.bat 더블클릭 (한 번만)
+   - openpyxl 설치, 작업 스케줄러 등록, 그리고 바로 1회 실행해서 2026-05-24 이후 빠진 데이터를 채웁니다.
+
+동작
+- 매일 09:00(한국시간 = UTC 00:00, 전날 일봉 마감 시각)에 마지막 날짜 이후 마감된 일봉을 추가합니다.
+- 데이터: Binance BTCUSDT 일봉 시가/종가 (실패 시 Coinbase BTC-USD).
+- PC가 꺼져 있었으면 켜진 뒤 바로 실행되고, 며칠 밀려도 빠진 날짜를 모두 채웁니다.
+- 실행 결과는 같은 폴더 update_btc.log 에 기록됩니다.
+- 9시에 엑셀 파일이 열려 있으면 저장하지 못합니다(로그에 기록). 파일을 닫고 update_btc.py 를 더블클릭하거나 다음 날 자동으로 채워집니다.
+- 자동 업데이트 해제: 작업 스케줄러에서 BTC_PowerLaw_Update 삭제

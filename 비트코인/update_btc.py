@@ -6,6 +6,7 @@
 """
 import json
 import logging
+import math
 import sys
 import urllib.request
 from datetime import datetime, timedelta, timezone
@@ -13,6 +14,8 @@ from pathlib import Path
 
 from openpyxl import load_workbook
 from openpyxl.chart import LineChart, Reference
+from openpyxl.formatting.formatting import ConditionalFormattingList
+from openpyxl.formatting.rule import ColorScaleRule
 from openpyxl.styles import Font
 
 HERE = Path(__file__).resolve().parent
@@ -130,6 +133,53 @@ def rebuild_chart(wb, ws, last):
     cs.add_chart(ch, 'A1')
 
 
+def power_law(ws, genesis):
+    """'설정' 시트와 같은 로그-로그 회귀 (SLOPE/INTERCEPT/STEYX) 를 파이썬으로 계산"""
+    xs, ys = [], []
+    for d, _o, c in ws.iter_rows(min_row=2, max_col=3, values_only=True):
+        if d is not None and c:
+            xs.append(math.log10((d - genesis).days))
+            ys.append(math.log10(c))
+    n = len(xs)
+    mx, my = sum(xs) / n, sum(ys) / n
+    b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sum((x - mx) ** 2 for x in xs)
+    a = my - b * mx
+    sigma = math.sqrt(sum((y - a - b * x) ** 2 for x, y in zip(xs, ys)) / (n - 2))
+    return a, b, sigma
+
+
+def summary(wb):
+    ws = wb['멱법칙']
+    genesis = wb['설정']['B3'].value
+    a, b, sig = power_law(ws, genesis)
+    r = last_row(ws)
+    day, close = ws.cell(r, 1).value, ws.cell(r, 3).value
+    log_mid = a + b * math.log10((day - genesis).days)
+    z = (math.log10(close) - log_mid) / sig
+    mid = 10 ** log_mid
+    return (f'[BTC 멱법칙] {day:%Y-%m-%d}\n'
+            f'종가 ${close:,.0f}\n'
+            f'현재 시그마 {z:+.2f}\n'
+            f'중심가 ${mid:,.0f}\n'
+            f'+1σ ${mid * 10 ** sig:,.0f} / +2σ ${mid * 10 ** (2 * sig):,.0f}\n'
+            f'-1σ ${mid / 10 ** sig:,.0f}')
+
+
+def notify(wb):
+    try:
+        import kakao_notify
+    except ImportError:
+        return
+    if not kakao_notify.configured():
+        return
+    try:
+        msg = summary(wb)
+        kakao_notify.send(msg)
+        logging.info('카카오톡 전송: %s', msg.replace('\n', ' | '))
+    except Exception as e:
+        logging.error('카카오톡 전송 실패: %s', e)
+
+
 def main(fetcher=fetch, today=None):
     wb = load_workbook(XLSX)
     ws = wb['멱법칙']
@@ -140,6 +190,7 @@ def main(fetcher=fetch, today=None):
     start = last_day + timedelta(days=1)
     if start > end:
         logging.info('추가할 데이터 없음 (마지막 %s)', last_day)
+        notify(wb)
         return 0
     data = fetcher(start, end)
     days = sorted(data)
@@ -149,12 +200,15 @@ def main(fetcher=fetch, today=None):
     if new_last + 1 > FIT_ROWS:
         logging.warning('데이터가 %d행에 가까워졌습니다. 설정 시트 회귀 범위를 늘리세요.', FIT_ROWS)
     ws.auto_filter.ref = f'A1:L{new_last}'
-    for cf in ws.conditional_formatting:
-        cf.sqref = f'D2:D{new_last}'
+    ws.conditional_formatting = ConditionalFormattingList()
+    ws.conditional_formatting.add(f'D2:D{new_last}', ColorScaleRule(
+        start_type='num', start_value=-2, start_color='5B9BD5', mid_type='num', mid_value=0,
+        mid_color='FFFFFF', end_type='num', end_value=2, end_color='F8696B'))
     rebuild_chart(wb, ws, new_last)
     wb.calculation.fullCalcOnLoad = True  # 엑셀에서 열 때 수식 재계산
     wb.save(XLSX)
     logging.info('%d일 추가 (%s ~ %s)', len(days), days[0] if days else '-', days[-1] if days else '-')
+    notify(wb)
     return len(days)
 
 
